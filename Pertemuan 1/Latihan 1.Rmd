@@ -1,1 +1,10 @@
+# Latihan MPDW
 
+Dalam hal ini akan dibuat variabel x bernilai 7
+
+```{r}
+x=7
+x
+```
+
+![](images/do-anyone-have-that-gif-where-depth-5-is-calling-you-on-the-v0-rwj0svgbgteg1.webp){width="189"}
