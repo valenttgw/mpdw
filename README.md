@@ -1,2 +1,2 @@
 # mpdw
-Praktikum MPDW 2026
+Praktikum Metode Peramalan Deret Waktu 2026
