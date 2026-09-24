@@ -1,0 +1,186 @@
+---
+title: "mpdw 4/5"
+author: "Valent Trityo Gratia Widyatmoko M0401241074"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+library(TSA)
+library(tseries)
+```
+
+# MA(2)
+```{r}
+set.seed(33550336)
+wn <- rnorm(300) 
+
+ma2_man <- wn
+for(i in 3:300){
+  ma2_man[i] <- wn[i] + 0.4 * wn[i-1] + 0.6 * wn[i-2]
+}
+
+ma2_sim <- arima.sim(list(order=c(0,0,2), ma=c(0.4, 0.6)), n=300)
+```
+
+## Plot dan Identifikasi Kestasioneran MA(2)
+```{r}
+par(mfrow=c(2,2))
+ts.plot(ma2_sim, main="Time Series MA(2)")
+acf(ma2_sim, main="ACF MA(2)")
+pacf(ma2_sim, main="PACF MA(2)")
+par(mfrow=c(1,1))
+TSA::eacf(ma2_sim)
+```
+Plot time series menunjukkan data stasioner dalam rataan dan ragam. Plot ACF cuts off setelah lag kedua dan PACF tails off, sesuai karakteristik teori MA(2). Matriks EACF juga menunjukkan awal segitiga nol pada baris ke-0 dan kolom ke-2 yang mengindikasikan kecocokan model MA(2).
+
+## Scatterplot Antar Lag dan Autokorelasi MA(2)
+```{r}
+yt_ma1 <- ma2_sim[-1]
+yt_1_ma <- ma2_sim[-300]
+
+yt_ma2 <- ma2_sim[-c(1,2)]
+yt_2_ma <- ma2_sim[-c(299,300)]
+
+yt_ma3 <- ma2_sim[-c(1,2,3)]
+yt_3_ma <- ma2_sim[-c(298,299,300)]
+
+par(mfrow=c(1,3))
+plot(x=yt_1_ma, y=yt_ma1, main="Yt vs Yt-1", xlab="Y_t-1", ylab="Y_t")
+plot(x=yt_2_ma, y=yt_ma2, main="Yt vs Yt-2", xlab="Y_t-2", ylab="Y_t")
+plot(x=yt_3_ma, y=yt_ma3, main="Yt vs Yt-3", xlab="Y_t-3", ylab="Y_t")
+par(mfrow=c(1,1))
+```
+Autokorelasi simulasi mendekati nilai teoritis dan terbukti cuts off setelah lag kedua. Nilai korelasi simulasi lag pertama hingga ketiga secara berurutan adalah 0.476, 0.337, dan -0.061 yang sejalan dengan nilai teoritisnya yaitu 0.421, 0.394, dan 0.
+
+```{r}
+cor_ma_1 <- cor(yt_ma1, yt_1_ma)
+cor_ma_2 <- cor(yt_ma2, yt_2_ma)
+cor_ma_3 <- cor(yt_ma3, yt_3_ma)
+
+theo_ma <- ARMAacf(ma=c(0.4, 0.6), lag.max=3)
+
+data.frame(
+  Lag = c("Lag 1", "Lag 2", "Lag 3"),
+  Simulasi = c(cor_ma_1, cor_ma_2, cor_ma_3),
+  Teoritis = theo_ma[2:4]
+)
+```
+
+
+# AR(2)
+```{r}
+set.seed(33550336)
+wn <- rnorm(300)
+
+ar2_man <- wn
+for (i in 3:300) {
+  # Y_t = e_t + phi_1 * Y_{t-1} + phi_2 * Y_{t-2}
+  ar2_man[i] <- wn[i] + 0.5 * ar2_man[i-1] + 0.2 * ar2_man[i-2]
+}
+
+ar2_sim <- arima.sim(list(order=c(2,0,0), ar=c(0.5, 0.2)), n=300)
+```
+
+## Plot dan Identifikasi Kestasioneran AR(2)
+```{r}
+par(mfrow=c(2,2))
+ts.plot(ar2_sim, main="Time Series AR(2)")
+acf(ar2_sim, main="ACF AR(2)")
+pacf(ar2_sim, main="PACF AR(2)")
+par(mfrow=c(1,1))
+TSA::eacf(ar2_sim)
+```
+Plot time series terlihat stasioner pada rataan dan ragam. Plot ACF tails off dan PACF cuts off setelah lag kedua yang menjadi ciri khas model AR(2). Meskipun sedikit bias menyebar akibat variasi acak, batas simbol o pada EACF konsisten berada di sekitar baris pertama dan kedua.
+
+## Scatterplot Antar Lag dan Autokorelasi AR(2)
+```{r}
+yt_ar1 <- ar2_sim[-1]
+yt_1_ar <- ar2_sim[-300]
+
+yt_ar2 <- ar2_sim[-c(1,2)]
+yt_2_ar <- ar2_sim[-c(299,300)]
+
+yt_ar3 <- ar2_sim[-c(1,2,3)]
+yt_3_ar <- ar2_sim[-c(298,299,300)]
+
+par(mfrow=c(1,3))
+plot(x=yt_1_ar, y=yt_ar1, main="Yt vs Yt-1", xlab="Y_t-1", ylab="Y_t")
+plot(x=yt_2_ar, y=yt_ar2, main="Yt vs Yt-2", xlab="Y_t-2", ylab="Y_t")
+plot(x=yt_3_ar, y=yt_ar3, main="Yt vs Yt-3", xlab="Y_t-3", ylab="Y_t")
+par(mfrow=c(1,1))
+```
+Korelasi menunjukkan pola tails off yang sesuai teori proses autoregressive. Nilai korelasi simulasi untuk lag pertama hingga ketiga adalah 0.630, 0.472, dan 0.310 yang sangat presisi mengikuti nilai teoritisnya secara berurutan yaitu 0.625, 0.512, dan 0.381.
+
+```{r}
+cor_ar_1 <- cor(yt_ar1, yt_1_ar)
+cor_ar_2 <- cor(yt_ar2, yt_2_ar)
+cor_ar_3 <- cor(yt_ar3, yt_3_ar)
+
+theo_ar <- ARMAacf(ar=c(0.5, 0.2), lag.max=3)
+
+data.frame(
+  Lag = c("Lag 1", "Lag 2", "Lag 3"),
+  Simulasi = c(cor_ar_1, cor_ar_2, cor_ar_3),
+  Teoritis = theo_ar[2:4]
+)
+```
+
+
+# ARMA(2,2)
+```{r}
+set.seed(33550336)
+wn <- rnorm(300)
+
+arma22_man <- wn
+for(i in 3:300){
+  arma22_man[i] <- 0.5 * arma22_man[i-1] + 0.2 * arma22_man[i-2] + wn[i] + 0.4 * wn[i-1] + 0.6 * wn[i-2]
+}
+
+arma22_sim <- arima.sim(list(order=c(2,0,2), ar=c(0.5, 0.2), ma=c(0.4, 0.6)), n=300)
+```
+
+## Plot dan Identifikasi Kestasioneran ARMA(2,2)
+```{r}
+par(mfrow=c(2,2))
+ts.plot(arma22_sim, main="Time Series ARMA(2,2)")
+acf(arma22_sim, main="ACF ARMA(2,2)")
+pacf(arma22_sim, main="PACF ARMA(2,2)")
+par(mfrow=c(1,1))
+TSA::eacf(arma22_sim)
+```
+Plot time series menunjukkan data stasioner memusat dalam rataan. Plot ACF dan PACF sama-sama menunjukkan pola tails off yang bergelombang perlahan. Matriks EACF mengonfirmasi pemodelan dengan terbentuknya titik puncak segitiga nol pada baris kedua dan kolom kedua.
+
+## Scatterplot Antar Lag dan Autokorelasi ARMA(2,2)
+```{r}
+yt_arma1 <- arma22_sim[-1]
+yt_1_arma <- arma22_sim[-300]
+
+yt_arma2 <- arma22_sim[-c(1,2)]
+yt_2_arma <- arma22_sim[-c(299,300)]
+
+yt_arma3 <- arma22_sim[-c(1,2,3)]
+yt_3_arma <- arma22_sim[-c(298,299,300)]
+
+par(mfrow=c(1,3))
+plot(x=yt_1_arma, y=yt_arma1, main="Yt vs Yt-1", xlab="Y_t-1", ylab="Y_t")
+plot(x=yt_2_arma, y=yt_arma2, main="Yt vs Yt-2", xlab="Y_t-2", ylab="Y_t")
+plot(x=yt_3_arma, y=yt_arma3, main="Yt vs Yt-3", xlab="Y_t-3", ylab="Y_t")
+par(mfrow=c(1,1))
+```
+Nilai korelasi antar lag menurun bertahap tanpa cuts off yang tajam. Hasil korelasi simulasi lag pertama hingga ketiga adalah 0.854, 0.691, dan 0.444 yang sangat konsisten dengan perhitungan teoritisnya yaitu 0.859, 0.749, dan 0.546.
+
+```{r}
+cor_arma_1 <- cor(yt_arma1, yt_1_arma)
+cor_arma_2 <- cor(yt_arma2, yt_2_arma)
+cor_arma_3 <- cor(yt_arma3, yt_3_arma)
+
+theo_arma <- ARMAacf(ar=c(0.5, 0.2), ma=c(0.4, 0.6), lag.max=3)
+
+data.frame(
+  Lag = c("Lag 1", "Lag 2", "Lag 3"),
+  Simulasi = c(cor_arma_1, cor_arma_2, cor_arma_3),
+  Teoritis = theo_arma[2:4]
+)
+```
+
