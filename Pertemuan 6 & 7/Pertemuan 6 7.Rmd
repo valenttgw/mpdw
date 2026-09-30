@@ -1,0 +1,246 @@
+---
+title: "MPDW pertemuan 6 7"
+author: "Valent Trityo Gratia Widyatmoko M0401241074"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r warning=FALSE, message=FALSE}
+library(ggplot2)
+library(tsibble)
+library(tseries)
+library(MASS)
+library(forecast)
+library(TSA)
+library(TTR)
+library(aTSA)
+library(graphics)
+```
+
+# Eksplorasi Data
+
+Data yang digunakan adalah 100 observasi awal dari dataset Suhu Minimum Harian. Data dibagi menjadi data latih dan data uji dengan proporsi 80:20.
+```{r}
+path_file <- "C:/Valent/Kuliah/Semester 5/Metode Peramalan Deret Waktu/daily-min-temperatures(1).csv"
+data_suhu <- read.csv(path_file, sep="\t")
+
+head(data_suhu)
+
+data_100 <- data_suhu[1:100, ]
+data.ts <- ts(data_100$Temp)
+
+suhu.train <- data_100$Temp[1:80]
+suhu.test <- data_100$Temp[81:100]
+
+train.ts <- ts(suhu.train, start = 1)
+test.ts <- ts(suhu.test, start = 81)
+```
+
+## Plot Data Penuh
+```{r}
+plot.ts(data.ts, 
+        lty = 1, 
+        xlab = "Waktu", 
+        ylab = "Suhu Minimum", 
+        main = "Plot Data Penuh Suhu Minimum")
+```
+
+## PLot Data Latih
+```{r}
+plot.ts(train.ts, lty=1, xlab="Waktu", ylab="Suhu", main="Plot Data Latih (Train)")
+```
+Berdasarkan plot data deret waktu, data latih tampak berfluktuasi di sekitar nilai tengah yang stabil dan tidak menunjukkan adanya tren yang kuat, sehingga mengindikasikan bahwa data cenderung sudah stasioner.
+
+## Plot data uji
+```{r}
+plot.ts(test.ts, lty=1, xlab="Waktu", ylab="Suhu", main="Plot Data Uji (Test)")
+```
+
+
+# Uji Stasioneritas Data
+## Plot ACF
+```{r}
+acf(train.ts, main="ACF Data Latih")
+```
+Berdasarkan plot ACF, garis meluruh secara perlahan (tails off) atau cuts off setelah lag ke-2. Hal ini memberikan dugaan awal mengenai kestasioneran.
+
+## Uji ADF
+```{r}
+tseries::adf.test(train.ts)
+```
+H0 : Data tidak stasioner dalam rataan
+H1 : Data stasioner dalam rataan
+Berdasarkan uji ADF, didapat p-value sebesar 0.1057 yang lebih besar dari taraf nyata 5% (α = 0.05) sehingga kita gagal tolak H0. Secara statistik murni, data belum stasioner kuat pada taraf 5%. Namun, karena nilainya cukup mendekati 0.1 (taraf 10%) dan plot ACF maupun data rentang waktu secara visual tampak cukup stasioner, kita akan mengasumsikan data sudah cukup stasioner dan mencoba melanjutkan pemodelan tanpa melakukan differencing (d = 0).
+
+
+## Plot Box-Cox
+```{r}
+index <- seq(1:length(train.ts))
+
+min_val <- min(train.ts)
+if (min_val <= 0) {
+  train_shifted <- train.ts + abs(min_val) + 1
+} else {
+  train_shifted <- train.ts
+}
+
+bc <- boxcox(train_shifted ~ index, lambda = seq(0, 2, by = 0.1))
+
+lambda_opt <- bc$x[which.max(bc$y)]
+lambda_opt
+
+ci_lambda <- bc$x[bc$y > max(bc$y) - 0.5 * qchisq(0.95, df = 1)]
+c(Batas_Bawah = min(ci_lambda), Batas_Atas = max(ci_lambda))
+```
+Selang kepercayaan untuk nilai λ memuat angka 1. Hal ini menunjukkan bahwa data sudah stasioner dalam ragam, sehingga transformasi tidak diperlukan.
+
+# Identifikasi Model
+## Plot PACF
+```{r}
+pacf(train.ts, main="PACF Data Latih")
+```
+Berdasarkan plot PACF, terlihat cuts off pada lag pertama atau kedua. Dikombinasikan dengan ACF, kita dapat menduga beberapa model tentatif seperti ARIMA(1,0,0), ARIMA(2,0,0), ARIMA(0,0,2), dan ARIMA(1,0,1).
+
+## Plot EACF
+```{r}
+eacf(train.ts)
+```
+Berdasarkan output EACF, ujung kiri atas dari pola segitiga nol (dilambangkan dengan 'o') berada pada baris AR = 1 dan kolom MA = 1. Hal ini mendukung bahwa model ARIMA(1,0,1) merupakan salah satu kandidat model tentatif yang sangat kuat.
+
+## Pendugaan Parameter Model Tentatif
+```{r}
+# ARIMA(1,0,0)
+model1 <- Arima(train.ts, order=c(1,0,0), method="ML")
+summary(model1)
+lmtest::coeftest(model1)
+
+# ARIMA(0,0,2)
+model2 <- Arima(train.ts, order=c(0,0,2), method="ML")
+summary(model2)
+lmtest::coeftest(model2)
+
+# ARIMA(1,0,1)
+model3 <- Arima(train.ts, order=c(1,0,1), method="ML")
+summary(model3)
+lmtest::coeftest(model3)
+
+# ARIMA(2,0,0)
+model4 <- Arima(train.ts, order=c(2,0,0), method="ML")
+summary(model4)
+lmtest::coeftest(model4)
+```
+
+## Ringkasan AIC
+```{r}
+model_tentatif <- data.frame(
+  Model = c("ARIMA(1,0,0)", "ARIMA(0,0,2)", "ARIMA(1,0,1)", "ARIMA(2,0,0)"),
+  AIC   = c(AIC(model1), AIC(model2), AIC(model3), AIC(model4)),
+  BIC   = c(BIC(model1), BIC(model2), BIC(model3), BIC(model4))
+)
+
+model_tentatif
+```
+Model ARIMA(1,0,1) memiliki nilai AIC yang paling kecil dan seluruh parameternya signifikan. Model ini dipilih sebagai model terbaik sementara.
+
+# Analisis Sisaan
+Pengecekan asumsi sisaan (normalitas, kebebasan, kehomogenan ragam) untuk model terbaik ARIMA(1,0,1).
+
+## Eksplorasi Sisaan
+```{r}
+sisaan <- model3$residuals
+
+par(mfrow = c(2,2))  
+
+car::qqPlot(sisaan, main="Normal Q-Q Plot")
+
+plot(sisaan, type = "p", main = "Plot Sisaan vs Waktu", xlab = "Waktu", ylab = "Sisaan")
+
+acf(sisaan, main = "ACF Sisaan")
+pacf(sisaan, main = "PACF Sisaan")
+par(mfrow = c(1,1))
+```
+
+## Uji Formal
+```{r}
+# Normalitas
+ks.test(sisaan, "pnorm", mean(sisaan), sd(sisaan)) 
+# H0: Menyebar normal
+
+# Kebebasan Sisaan
+Box.test(sisaan, type = "Ljung") 
+# H0: Sisaan saling bebas (tidak ada autokorelasi)
+
+# Kehomogenan Ragam
+Box.test(sisaan^2, type = "Ljung") 
+# H0: Ragam sisaan homogen
+
+# Nilai Tengah = 0
+t.test(sisaan, mu = 0, conf.level = 0.95) 
+# H0: Nilai tengah sisaan sama dengan nol
+```
+Berdasarkan pengujian formal di atas, seluruh asumsi model terpenuhi dengan baik:
+
+Normalitas: Uji KS menghasilkan p-value = 0.8918 > 0.05, gagal tolak H0 (Sisaan menyebar normal).
+
+Kebebasan Sisaan: Uji Ljung-Box menghasilkan p-value = 0.9672 > 0.05, gagal tolak H0 (Sisaan saling bebas / tidak ada autokorelasi).
+
+Kehomogenan Ragam: Uji Ljung-Box untuk sisaan kuadrat menghasilkan p-value = 0.2763 > 0.05, gagal tolak H0 (Ragam sisaan homogen).
+
+Nilai Tengah Sisaan: Uji-t menghasilkan p-value = 0.9283 > 0.05, gagal tolak H0 (Nilai tengah sisaan sama dengan nol).
+
+## Overfitting
+Menaikkan orde AR dan MA dari model terbaik ARIMA(1,0,1) untuk memastikan tidak ada model yang lebih baik. Kandidat: ARIMA(2,0,1) dan ARIMA(1,0,2).
+
+```{r}
+# ARIMA(2,0,1)
+model_over1 <- Arima(train.ts, order=c(2,0,1), method="ML")
+lmtest::coeftest(model_over1) 
+
+# ARIMA(1,0,2)
+model_over2 <- Arima(train.ts, order=c(1,0,2), method="ML")
+lmtest::coeftest(model_over2)
+```
+Berdasarkan output pengujian overfitting:
+
+Pada model ARIMA(2,0,1), parameter tambahan ar2 memiliki p-value sebesar 0.91080 > 0.05 (Tidak signifikan).
+
+Pada model ARIMA(1,0,2), parameter tambahan ma2 memiliki p-value sebesar 0.8722 > 0.05 (Tidak signifikan).
+Karena parameter tambahan pada model-model overfitting tidak ada yang signifikan, maka model dasar ARIMA(1,0,1) tetap dipertahankan sebagai model terbaik.
+
+## MOdel Terbaik
+```{r}
+model_terbaik <- model3
+summary(model_terbaik)
+```
+
+## Peramalan
+Melakukan peramalan untuk 20 periode ke depan (sesuai panjang data uji/test). Karena kita tidak melakukan differencing (d=0), kita tidak perlu menggunakan metode inverse differencing.
+```{r}
+ramalan <- forecast::forecast(model_terbaik, h = length(test.ts))
+data.ramalan <- ramalan$mean
+plot(ramalan, main="Peramalan Suhu Minimum (20 Hari)")
+
+perbandingan <- cbind(
+  Aktual   = test.ts,
+  Forecast = data.ramalan
+)
+print(head(perbandingan, 10))
+
+akurasi_test <- accuracy(data.ramalan, test.ts)
+akurasi_test
+```
+
+```{r}
+# Plot gabungan Aktual dan Forecast
+ts.plot(data.ts, col = "black", lty = 1,
+        xlab = "Waktu", ylab = "Suhu Minimum", main = "Aktual vs Forecast")
+
+# Tambahkan garis forecast
+lines(81:(80+length(data.ramalan)), data.ramalan, col = "blue", lty = 2, lwd = 2)
+
+legend("bottomleft", 
+       legend = c("Data Aktual", "Forecast"),
+       col = c("black", "blue"),
+       lty = c(1,2), lwd = c(1,2), bty = "n")
+```
+Berdasarkan tabel akurasi pada data uji (test set), didapatkan nilai MAPE sebesar 27.97%. Nilai ini menunjukkan bahwa performa peramalan model ARIMA(1,0,1) berada pada kategori yang cukup memadai dan wajar (layak) dalam memprediksi fluktuasi suhu minimum harian untuk 20 periode ke depan.
